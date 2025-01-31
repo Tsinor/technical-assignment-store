@@ -151,7 +151,6 @@ export class Store implements IStore {
         }
 
         let subVal = currentObj[key];
-
         if (typeof subVal === "function") {
           subVal = subVal();
           currentObj[key] = subVal;
@@ -162,8 +161,14 @@ export class Store implements IStore {
           currentObj[key] = subVal;
         }
 
-        this._writeRecursive(parts.slice(1), "rw", newValue, subVal);
+        if (subVal instanceof Store) {
+          const remainingPath = parts.slice(1).join(":");
+          subVal.write(remainingPath, newValue);
 
+          return;
+        }
+
+        this._writeRecursive(parts.slice(1), finalPermission, newValue, subVal);
         return;
       }
       if (!canWrite(finalPermission)) {
@@ -196,16 +201,41 @@ export class Store implements IStore {
 
     if (currentObj && typeof currentObj === "object") {
       if (parts.length > 1) {
+        if (!canRead(inheritedPermission)) {
+          throw new Error(`No read permission for key: ${key}`);
+        }
+
         let subVal = currentObj[key];
+
+        if (typeof subVal === "function") {
+          subVal = subVal();
+          currentObj[key] = subVal;
+        }
 
         if (!subVal) {
           subVal = new Store();
           currentObj[key] = subVal;
         }
 
-        this._writeRecursive(parts.slice(1), "rw", newValue, subVal);
+        if (subVal instanceof Store) {
+          const remainingPath = parts.slice(1).join(":");
+          subVal.write(remainingPath, newValue);
+
+          return;
+        }
+
+        this._writeRecursive(
+          parts.slice(1),
+          inheritedPermission,
+          newValue,
+          subVal
+        );
 
         return;
+      }
+
+      if (!canWrite(inheritedPermission)) {
+        throw new Error(`No write permission for key: ${key}`);
       }
 
       currentObj[key] = newValue;
