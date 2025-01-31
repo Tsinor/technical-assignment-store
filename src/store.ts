@@ -150,51 +150,24 @@ export class Store implements IStore {
           throw new Error(`No read permission for key: ${key}`);
         }
 
-        let subVal = currentObj[key];
-        if (typeof subVal === "function") {
-          subVal = subVal();
-          currentObj[key] = subVal;
-        }
-
-        if (!subVal) {
-          subVal = new Store();
-          currentObj[key] = subVal;
-        }
+        let subVal = this._resolveSubValue(currentObj, key);
 
         if (subVal instanceof Store) {
           const remainingPath = parts.slice(1).join(":");
           subVal.write(remainingPath, newValue);
-
           return;
         }
 
         this._writeRecursive(parts.slice(1), finalPermission, newValue, subVal);
+
         return;
       }
+
       if (!canWrite(finalPermission)) {
         throw new Error(`No write permission for key: ${key}`);
       }
 
-      if (
-        typeof newValue === "function" ||
-        newValue instanceof Store ||
-        Array.isArray(newValue)
-      ) {
-        currentObj[key] = newValue;
-
-        return;
-      }
-      if (newValue && typeof newValue === "object") {
-        const nestedStore = new Store();
-
-        nestedStore.writeEntries(newValue as JSONObject);
-
-        currentObj[key] = nestedStore;
-
-        return;
-      }
-
-      currentObj[key] = newValue;
+      this._assignValue(currentObj, key, newValue);
 
       return;
     }
@@ -205,17 +178,7 @@ export class Store implements IStore {
           throw new Error(`No read permission for key: ${key}`);
         }
 
-        let subVal = currentObj[key];
-
-        if (typeof subVal === "function") {
-          subVal = subVal();
-          currentObj[key] = subVal;
-        }
-
-        if (!subVal) {
-          subVal = new Store();
-          currentObj[key] = subVal;
-        }
+        let subVal = this._resolveSubValue(currentObj, key);
 
         if (subVal instanceof Store) {
           const remainingPath = parts.slice(1).join(":");
@@ -247,6 +210,42 @@ export class Store implements IStore {
       throw new Error(
         `Cannot write deeper into a primitive value at key: ${key}`
       );
+    }
+
+    currentObj[key] = newValue;
+  }
+
+  private _resolveSubValue(currentObj: any, key: string): any {
+    let subVal = currentObj[key];
+
+    if (typeof subVal === "function") {
+      subVal = subVal();
+      currentObj[key] = subVal;
+    }
+
+    if (!subVal) {
+      subVal = new Store();
+      currentObj[key] = subVal;
+    }
+
+    return subVal;
+  }
+
+  private _assignValue(currentObj: any, key: string, newValue: StoreValue) {
+    if (
+      typeof newValue === "function" ||
+      newValue instanceof Store ||
+      Array.isArray(newValue)
+    ) {
+      currentObj[key] = newValue;
+      return;
+    }
+
+    if (newValue && typeof newValue === "object") {
+      const nestedStore = new Store();
+      nestedStore.writeEntries(newValue as JSONObject);
+      currentObj[key] = nestedStore;
+      return;
     }
 
     currentObj[key] = newValue;
